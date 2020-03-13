@@ -754,21 +754,21 @@ impl<'a, 'b, 'tcx> TypeVerifier<'a, 'b, 'tcx> {
                 ty::Adt(adt_def, substs) if !adt_def.is_enum() => {
                     (&adt_def.variants[VariantIdx::new(0)], substs)
                 }
-                ty::Closure(def_id, substs) => {
-                    return match substs.as_closure().upvar_tys(def_id, tcx).nth(field.index()) {
+                ty::Closure(_, substs) => {
+                    return match substs.as_closure().upvar_tys().nth(field.index()) {
                         Some(ty) => Ok(ty),
                         None => Err(FieldAccessError::OutOfRange {
-                            field_count: substs.as_closure().upvar_tys(def_id, tcx).count(),
+                            field_count: substs.as_closure().upvar_tys().count(),
                         }),
                     };
                 }
-                ty::Generator(def_id, substs, _) => {
+                ty::Generator(_, substs, _) => {
                     // Only prefix fields (upvars and current state) are
                     // accessible without a variant index.
-                    return match substs.as_generator().prefix_tys(def_id, tcx).nth(field.index()) {
+                    return match substs.as_generator().prefix_tys().nth(field.index()) {
                         Some(ty) => Ok(ty),
                         None => Err(FieldAccessError::OutOfRange {
-                            field_count: substs.as_generator().prefix_tys(def_id, tcx).count(),
+                            field_count: substs.as_generator().prefix_tys().count(),
                         }),
                     };
                 }
@@ -1943,22 +1943,22 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
                     Err(FieldAccessError::OutOfRange { field_count: variant.fields.len() })
                 }
             }
-            AggregateKind::Closure(def_id, substs) => {
-                match substs.as_closure().upvar_tys(def_id, tcx).nth(field_index) {
+            AggregateKind::Closure(_, substs) => {
+                match substs.as_closure().upvar_tys().nth(field_index) {
                     Some(ty) => Ok(ty),
                     None => Err(FieldAccessError::OutOfRange {
-                        field_count: substs.as_closure().upvar_tys(def_id, tcx).count(),
+                        field_count: substs.as_closure().upvar_tys().count(),
                     }),
                 }
             }
-            AggregateKind::Generator(def_id, substs, _) => {
+            AggregateKind::Generator(_, substs, _) => {
                 // It doesn't make sense to look at a field beyond the prefix;
                 // these require a variant index, and are not initialized in
                 // aggregate rvalues.
-                match substs.as_generator().prefix_tys(def_id, tcx).nth(field_index) {
+                match substs.as_generator().prefix_tys().nth(field_index) {
                     Some(ty) => Ok(ty),
                     None => Err(FieldAccessError::OutOfRange {
-                        field_count: substs.as_generator().prefix_tys(def_id, tcx).count(),
+                        field_count: substs.as_generator().prefix_tys().count(),
                     }),
                 }
             }
@@ -2080,9 +2080,7 @@ impl<'a, 'tcx> TypeChecker<'a, 'tcx> {
 
                     CastKind::Pointer(PointerCast::ClosureFnPointer(unsafety)) => {
                         let sig = match op.ty(*body, tcx).kind {
-                            ty::Closure(def_id, substs) => {
-                                substs.as_closure().sig_ty(def_id, tcx).fn_sig(tcx)
-                            }
+                            ty::Closure(_, substs) => substs.as_closure().sig_ty().fn_sig(tcx),
                             _ => bug!(),
                         };
                         let ty_fn_ptr_from = tcx.coerce_closure_fn_ty(sig, *unsafety);

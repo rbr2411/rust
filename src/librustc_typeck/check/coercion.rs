@@ -748,7 +748,7 @@ impl<'f, 'tcx> Coerce<'f, 'tcx> {
                 //     `fn(arg0,arg1,...) -> _`
                 // or
                 //     `unsafe fn(arg0,arg1,...) -> _`
-                let sig = self.closure_sig(def_id_a, substs_a);
+                let sig = self.closure_sig(substs_a);
                 let unsafety = fn_ty.unsafety();
                 let pointer_ty = self.tcx.coerce_closure_fn_ty(sig, unsafety);
                 debug!("coerce_closure_to_fn(a={:?}, b={:?}, pty={:?})", a, b, pointer_ty);

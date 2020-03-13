@@ -608,8 +608,8 @@ pub trait PrettyPrinter<'tcx>:
             }
             ty::Str => p!(write("str")),
             ty::Generator(did, substs, movability) => {
-                let upvar_tys = substs.as_generator().upvar_tys(did, self.tcx());
-                let witness = substs.as_generator().witness(did, self.tcx());
+                let tupled_upvars_ty = substs.as_generator().tupled_upvars_ty();
+                let witness = substs.as_generator().witness();
                 match movability {
                     hir::Movability::Movable => p!(write("[generator")),
                     hir::Movability::Static => p!(write("[static generator")),
@@ -618,21 +618,40 @@ pub trait PrettyPrinter<'tcx>:
                 // FIXME(eddyb) should use `def_span`.
                 if let Some(hir_id) = self.tcx().hir().as_local_hir_id(did) {
                     p!(write("@{:?}", self.tcx().hir().span(hir_id)));
-                    let mut sep = " ";
-                    for (&var_id, upvar_ty) in
-                        self.tcx().upvars(did).as_ref().iter().flat_map(|v| v.keys()).zip(upvar_tys)
-                    {
-                        p!(write("{}{}:", sep, self.tcx().hir().name(var_id)), print(upvar_ty));
-                        sep = ", ";
+
+                    // Only print upvars if they're known (i.e. not infer var or param).
+                    if let ty::Tuple(upvar_tys) = tupled_upvars_ty.kind {
+                        let mut sep = " ";
+                        for (&var_id, upvar_ty) in self
+                            .tcx()
+                            .upvars(did)
+                            .as_ref()
+                            .iter()
+                            .flat_map(|v| v.keys())
+                            .zip(upvar_tys)
+                        {
+                            p!(write("{}{}:", sep, self.tcx().hir().name(var_id)), print(upvar_ty));
+                            sep = ", ";
+                        }
                     }
                 } else {
                     // Cross-crate closure types should only be
                     // visible in codegen bug reports, I imagine.
                     p!(write("@{:?}", did));
-                    let mut sep = " ";
-                    for (index, upvar_ty) in upvar_tys.enumerate() {
-                        p!(write("{}{}:", sep, index), print(upvar_ty));
-                        sep = ", ";
+
+                    // Only print upvars if they're known (i.e. not infer var or param).
+                    if let ty::Tuple(upvar_tys) = tupled_upvars_ty.kind {
+                        let mut sep = " ";
+                        for (index, upvar_ty) in upvar_tys.iter().enumerate() {
+                            p!(write("{}{}:", sep, index), print(upvar_ty));
+                            sep = ", ";
+                        }
+                    }
+                }
+
+                if self.tcx().sess.verbose() {
+                    if !matches!(tupled_upvars_ty.kind, ty::Tuple(_)) {
+                        p!(write(" tupled_upvars_ty="), print(tupled_upvars_ty));
                     }
                 }
 
@@ -642,7 +661,7 @@ pub trait PrettyPrinter<'tcx>:
                 p!(in_binder(&types));
             }
             ty::Closure(did, substs) => {
-                let upvar_tys = substs.as_closure().upvar_tys(did, self.tcx());
+                let tupled_upvars_ty = substs.as_closure().tupled_upvars_ty();
                 p!(write("[closure"));
 
                 // FIXME(eddyb) should use `def_span`.
@@ -652,30 +671,43 @@ pub trait PrettyPrinter<'tcx>:
                     } else {
                         p!(write("@{:?}", self.tcx().hir().span(hir_id)));
                     }
-                    let mut sep = " ";
-                    for (&var_id, upvar_ty) in
-                        self.tcx().upvars(did).as_ref().iter().flat_map(|v| v.keys()).zip(upvar_tys)
-                    {
-                        p!(write("{}{}:", sep, self.tcx().hir().name(var_id)), print(upvar_ty));
-                        sep = ", ";
+
+                    // Only print upvars if they're known (i.e. not infer var or param).
+                    if let ty::Tuple(upvar_tys) = tupled_upvars_ty.kind {
+                        let mut sep = " ";
+                        for (&var_id, upvar_ty) in self
+                            .tcx()
+                            .upvars(did)
+                            .as_ref()
+                            .iter()
+                            .flat_map(|v| v.keys())
+                            .zip(upvar_tys)
+                        {
+                            p!(write("{}{}:", sep, self.tcx().hir().name(var_id)), print(upvar_ty));
+                            sep = ", ";
+                        }
                     }
                 } else {
                     // Cross-crate closure types should only be
                     // visible in codegen bug reports, I imagine.
                     p!(write("@{:?}", did));
-                    let mut sep = " ";
-                    for (index, upvar_ty) in upvar_tys.enumerate() {
-                        p!(write("{}{}:", sep, index), print(upvar_ty));
-                        sep = ", ";
+
+                    // Only print upvars if they're known (i.e. not infer var or param).
+                    if let ty::Tuple(upvar_tys) = tupled_upvars_ty.kind {
+                        let mut sep = " ";
+                        for (index, upvar_ty) in upvar_tys.iter().enumerate() {
+                            p!(write("{}{}:", sep, index), print(upvar_ty));
+                            sep = ", ";
+                        }
                     }
                 }
 
                 if self.tcx().sess.verbose() {
-                    p!(write(
-                        " closure_kind_ty={:?} closure_sig_ty={:?}",
-                        substs.as_closure().kind_ty(did, self.tcx()),
-                        substs.as_closure().sig_ty(did, self.tcx())
-                    ));
+                    p!(write(" closure_kind_ty="), print(substs.as_closure().kind_ty()));
+                    p!(write(" closure_sig_ty="), print(substs.as_closure().sig_ty()));
+                    if !matches!(tupled_upvars_ty.kind, ty::Tuple(_)) {
+                        p!(write(" tupled_upvars_ty="), print(tupled_upvars_ty));
+                    }
                 }
 
                 p!(write("]"))

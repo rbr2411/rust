@@ -1498,12 +1498,8 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
     /// Obtains the latest type of the given closure; this may be a
     /// closure in the current function, in which case its
     /// `ClosureKind` may not yet be known.
-    pub fn closure_kind(
-        &self,
-        closure_def_id: DefId,
-        closure_substs: SubstsRef<'tcx>,
-    ) -> Option<ty::ClosureKind> {
-        let closure_kind_ty = closure_substs.as_closure().kind_ty(closure_def_id, self.tcx);
+    pub fn closure_kind(&self, closure_substs: SubstsRef<'tcx>) -> Option<ty::ClosureKind> {
+        let closure_kind_ty = closure_substs.as_closure().kind_ty();
         let closure_kind_ty = self.shallow_resolve(closure_kind_ty);
         closure_kind_ty.to_opt_closure_kind()
     }
@@ -1512,8 +1508,8 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
     /// `tcx.fn_sig(def_id)`, this method will work during the
     /// type-checking of the enclosing function and return the closure
     /// signature in its partially inferred state.
-    pub fn closure_sig(&self, def_id: DefId, substs: SubstsRef<'tcx>) -> ty::PolyFnSig<'tcx> {
-        let closure_sig_ty = substs.as_closure().sig_ty(def_id, self.tcx);
+    pub fn closure_sig(&self, substs: SubstsRef<'tcx>) -> ty::PolyFnSig<'tcx> {
+        let closure_sig_ty = substs.as_closure().sig_ty();
         let closure_sig_ty = self.shallow_resolve(closure_sig_ty);
         closure_sig_ty.fn_sig(self.tcx)
     }
