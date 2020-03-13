@@ -92,31 +92,32 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
                 .into(),
             GenericParamDefKind::Const => span_bug!(expr.span, "closure has const param"),
         });
+        let tupled_upvars =
+            self.tcx.mk_tup(self.tcx.upvars(expr_def_id).iter().flat_map(|upvars| {
+                upvars.iter().map(|(&var_hir_id, _)| {
+                    self.infcx.next_ty_var(TypeVariableOrigin {
+                        kind: TypeVariableOriginKind::ClosureSynthetic,
+                        span: self.tcx.hir().span(var_hir_id),
+                    })
+                })
+            }));
         if let Some(GeneratorTypes { resume_ty, yield_ty, interior, movability }) = generator_types
         {
             let generator_substs = substs.as_generator();
-            self.demand_eqtype(
-                expr.span,
-                resume_ty,
-                generator_substs.resume_ty(expr_def_id, self.tcx),
-            );
-            self.demand_eqtype(
-                expr.span,
-                yield_ty,
-                generator_substs.yield_ty(expr_def_id, self.tcx),
-            );
-            self.demand_eqtype(
-                expr.span,
-                liberated_sig.output(),
-                generator_substs.return_ty(expr_def_id, self.tcx),
-            );
-            self.demand_eqtype(
-                expr.span,
-                interior,
-                generator_substs.witness(expr_def_id, self.tcx),
-            );
+            self.demand_eqtype(expr.span, resume_ty, generator_substs.resume_ty());
+            self.demand_eqtype(expr.span, yield_ty, generator_substs.yield_ty());
+            self.demand_eqtype(expr.span, liberated_sig.output(), generator_substs.return_ty());
+            self.demand_eqtype(expr.span, interior, generator_substs.witness());
+            self.demand_eqtype(expr.span, tupled_upvars, generator_substs.tupled_upvars_ty());
+            // HACK(eddyb) ensure `tupled_upvars` can be accessed through `substs`
+            // (without requiring access to `InferCtxt`).
+            let substs = self.resolve_vars_if_possible(&substs);
             return self.tcx.mk_generator(expr_def_id, substs, movability);
         }
+        self.demand_eqtype(expr.span, tupled_upvars, substs.as_closure().tupled_upvars_ty());
+        // HACK(eddyb) ensure `tupled_upvars` can be accessed through `substs`
+        // (without requiring access to `InferCtxt`).
+        let substs = self.resolve_vars_if_possible(&substs);
 
         let closure_type = self.tcx.mk_closure(expr_def_id, substs);
 
@@ -140,18 +141,10 @@ impl<'a, 'tcx> FnCtxt<'a, 'tcx> {
         );
 
         let sig_fn_ptr_ty = self.tcx.mk_fn_ptr(sig);
-        self.demand_eqtype(
-            expr.span,
-            sig_fn_ptr_ty,
-            substs.as_closure().sig_ty(expr_def_id, self.tcx),
-        );
+        self.demand_eqtype(expr.span, sig_fn_ptr_ty, substs.as_closure().sig_ty());
 
         if let Some(kind) = opt_kind {
-            self.demand_eqtype(
-                expr.span,
-                kind.to_ty(self.tcx),
-                substs.as_closure().kind_ty(expr_def_id, self.tcx),
-            );
+            self.demand_eqtype(expr.span, kind.to_ty(self.tcx), substs.as_closure().kind_ty());
         }
 
         closure_type
